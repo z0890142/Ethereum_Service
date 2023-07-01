@@ -1,0 +1,38 @@
+ENV: local
+SHORTENER_SERVICE:
+  NAME: url_shortener
+  HOST: "0.0.0.0"
+  PORT: "80"
+
+LOG_LEVEL : DEBUG
+LOG_FILE: stdout
+
+DATABASES:
+  DRIVER: mysql
+  HOST: 127.0.0.1
+  PORT: 3306
+  USERNAME: root
+  PASSWORD: pass
+  DBNAME: eth_service
+  CHARSET: utf8mb4
+  POOL_SIZE: 100
+  TIMEOUT: 1s
+  READ_TIMEOUT: 1s
+  WRITE_TIMEOUT: 1s
+
+REDIS:
+  ENABLE: false
+  HOST: 127.0.0.1
+  PORT: 6379
+  PASSWORD: pass
+
+STORE_BUFFER_SIZE: 1000
+MIGRATION_FILE_PATH: ../../pkg/database/migrations
+
+TRACE:
+  ENABLE: false
+  ENDPOINT: http://jaeger:14268/api/traces
+
+MAX_RETRY_TIME: 10
+RCP_ENDPOINT: https://data-seed-prebsc-2-s3.binance.org:8545/
+WORKER_NUMBER: 100
