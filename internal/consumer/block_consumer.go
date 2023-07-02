@@ -12,7 +12,7 @@ type blockConsumer struct {
 	blockChan       chan model.BlockRow
 	storeBufferSize int
 	storeInterval   time.Duration
-	mysqlHandler    *data.MysqlHandler
+	mysqlHandler    data.DataHandler
 }
 
 func (c *blockConsumer) Run() {

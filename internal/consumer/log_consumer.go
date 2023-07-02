@@ -12,7 +12,7 @@ type logConsumer struct {
 	logChan         chan model.LogRow
 	storeBufferSize int
 	storeInterval   time.Duration
-	mysqlHandler    *data.MysqlHandler
+	mysqlHandler    data.DataHandler
 }
 
 func (c *logConsumer) Run() {
