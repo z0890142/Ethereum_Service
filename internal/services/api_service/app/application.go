@@ -42,6 +42,7 @@ func Default() *Application {
 		initHooks:    make([]ApplicationHook, 0),
 		destroyHooks: make([]ApplicationHook, 0),
 		srv:          &http.Server{},
+		addr:         config.GetConfig().Service.Host + ":" + config.GetConfig().Service.Port,
 	}
 
 	initSlice := []ApplicationHook{initLoggerApplicationHook}
@@ -51,6 +52,8 @@ func Default() *Application {
 			panic(err)
 		}
 	}
+	o.AddInitHook(InitDatabaseHook)
+	o.AddInitHook(InitGinApplicationHook)
 
 	defaultApplication = o
 

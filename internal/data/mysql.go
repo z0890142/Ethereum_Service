@@ -108,12 +108,12 @@ func (m *MysqlHandler) SaveLogRow(ctx context.Context, logRow []*model.LogRow) e
 	return nil
 }
 
-func (m *MysqlHandler) GetBlockRowByBlockNumbers(ctx context.Context, numbers []uint64) ([]model.BlockRow, error) {
+func (m *MysqlHandler) GetBlockRowByBlockNumbers(ctx context.Context, numbers []int64) ([]model.BlockRow, error) {
 	var blockRows []model.BlockRow
 	err := m.gormClient.
 		Table(c.Block).
 		WithContext(ctx).
-		Where("block_number IN ?", numbers).
+		Where("number IN ?", numbers).
 		Find(&blockRows).Error
 
 	if err != nil {

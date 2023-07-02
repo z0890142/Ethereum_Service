@@ -16,7 +16,7 @@ type DataHandler interface {
 	GetBlockRow(ctx context.Context, blockRow *model.BlockRow) error
 	GetTransactionRowByBlockNumber(ctx context.Context, blockNumber int64) ([]model.TransactionRow, error)
 
-	GetBlockRowByBlockNumbers(ctx context.Context, numbers []uint64) ([]model.BlockRow, error)
+	GetBlockRowByBlockNumbers(ctx context.Context, numbers []int64) ([]model.BlockRow, error)
 
 	UpdateLatestBlockNumber(ctx context.Context, blockNumber int64) error
 	GetLatestBlockNumber(ctx context.Context) (int64, error)

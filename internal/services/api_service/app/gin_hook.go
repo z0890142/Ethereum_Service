@@ -8,16 +8,6 @@ import (
 
 var defaultController *controller.Controller
 
-func initCtrl(app *Application, r *gin.Engine) (*controller.Controller, error) {
-
-	defaultController = controller.NewController()
-
-	r.GET("/transaction/:txHash", defaultController.GetTransaction)
-	r.GET("/blocks/:id", defaultController.GetBlock)
-
-	return defaultController, nil
-}
-
 func InitGinApplicationHook(app *Application) error {
 	if app.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
@@ -27,7 +17,13 @@ func InitGinApplicationHook(app *Application) error {
 	r := gin.New()
 	r.Use(gin.Recovery())
 
-	initCtrl(app, r)
+	defaultController = controller.NewController()
+
+	r.GET("/transaction/:txHash", defaultController.GetTransaction)
+	r.GET("/blocks", defaultController.ListBlocks)
+	r.GET("/blocks/:id", defaultController.GetBlock)
+
+	app.srv.Handler = r
 
 	return nil
 }
