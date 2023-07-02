@@ -55,3 +55,7 @@ func (c *logConsumer) Run() {
 func (c *logConsumer) GetChan() interface{} {
 	return c.logChan
 }
+
+func (c *logConsumer) Shutdown() {
+	close(c.logChan)
+}

@@ -56,3 +56,7 @@ func (c *blockConsumer) Run() {
 func (c *blockConsumer) GetChan() interface{} {
 	return c.blockChan
 }
+
+func (c *blockConsumer) Shutdown() {
+	close(c.blockChan)
+}

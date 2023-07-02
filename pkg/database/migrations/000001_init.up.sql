@@ -1,4 +1,3 @@
-
 CREATE TABLE IF NOT EXISTS `block` (
   `number` bigint NOT NULL,
   `gas_limit` bigint(20) unsigned NOT NULL,
@@ -31,3 +30,11 @@ CREATE TABLE IF NOT EXISTS `log` (
   `data` blob NOT NULL,
   PRIMARY KEY (`tx_hash`,`index`)
 ) ;
+
+CREATE TABLE IF NOT EXISTS `latest_block_number` (
+  `id` int(10) unsigned NOT NULL,
+  `block_number` bigint NOT NULL,
+  PRIMARY KEY (`id`)
+) ;
+
+insert into latest_block_number (id, block_number) values (0, 0);

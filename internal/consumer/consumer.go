@@ -11,6 +11,7 @@ import (
 type Consumer interface {
 	Run()
 	GetChan() interface{}
+	Shutdown()
 }
 
 type ConsumerConf struct {

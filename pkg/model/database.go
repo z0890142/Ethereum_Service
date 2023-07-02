@@ -29,3 +29,8 @@ type LogRow struct {
 	Index  uint
 	Data   []byte
 }
+
+type LatestBlockNumber struct {
+	Id          int64
+	BlockNumber int64
+}

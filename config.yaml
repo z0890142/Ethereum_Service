@@ -36,3 +36,4 @@ TRACE:
 MAX_RETRY_TIME: 10
 RCP_ENDPOINT: https://data-seed-prebsc-2-s3.binance.org:8545/
 WORKER_NUMBER: 100
+MQ_ENDPOINT: amqp://user:pass@localhost:5672/

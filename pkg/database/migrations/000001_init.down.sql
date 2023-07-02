@@ -1,3 +1,5 @@
 DROP TABLE IF EXISTS `block`;
 DROP TABLE IF EXISTS `tx`;
 DROP TABLE IF EXISTS `log`;
+DROP TABLE IF EXISTS `latest_block_number`;
+

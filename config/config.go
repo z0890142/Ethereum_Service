@@ -39,6 +39,7 @@ type Config struct {
 	Trace             Trace  `mapstructure:"TRACE"`
 	MaxRetryTime      int    `mapstructure:"MAX_RETRY_TIME"`
 	RCPEndpoint       string `mapstructure:"RCP_ENDPOINT"`
+	MQEndpoint        string `mapstructure:"MQ_ENDPOINT"`
 }
 
 // Service defines service configuration struct.

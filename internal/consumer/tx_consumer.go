@@ -54,3 +54,7 @@ func (c *txConsumer) Run() {
 func (c *txConsumer) GetChan() interface{} {
 	return c.txChan
 }
+
+func (c *txConsumer) Shutdown() {
+	close(c.txChan)
+}

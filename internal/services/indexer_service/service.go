@@ -10,12 +10,14 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/streadway/amqp"
 )
 
 type Service struct {
@@ -23,23 +25,32 @@ type Service struct {
 	blockScanner scanner.BlockScanner
 	txScanner    scanner.TxScanner
 
-	latestBlockNumber int64
-
 	blockConsumer consumer.Consumer
 	txConsumer    consumer.Consumer
 	logConsumer   consumer.Consumer
 
+	latestBlockNumber int64
+
+	jobChan chan model.Job
+	jobDone chan chan model.JobResult
+	mqConn  *amqp.Connection
+
+	rcpEndpoint string
+
+	shutDownCtx  context.Context
+	cancel       context.CancelFunc
 	shutdownOnce sync.Once
 }
 
 func NewService(rcpEndpoint string) (*Service, error) {
+
 	ethClient, err := ethclient.Dial(rcpEndpoint)
 	if err != nil {
 		return nil, fmt.Errorf("newDefaultEthHandler : %s", err.Error())
 	}
 
-	blockScanner := scanner.NewDefaultBlockScanner(ethClient)
-	txScanner := scanner.NewDefaultTxScanner(ethClient)
+	blockScanner := scanner.NewDefaultBlockScanner(rcpEndpoint)
+	txScanner := scanner.NewDefaultTxScanner(rcpEndpoint)
 
 	blockConsume := consumer.NewConsumer(&consumer.ConsumerConf{
 		Type:            c.BlockConsumerType,
@@ -65,6 +76,9 @@ func NewService(rcpEndpoint string) (*Service, error) {
 		txConsumer:    txConsume,
 		logConsumer:   logConsume,
 		shutdownOnce:  sync.Once{},
+		rcpEndpoint:   rcpEndpoint,
+		jobChan:       make(chan model.Job, 1000),
+		jobDone:       make(chan chan model.JobResult, 1000),
 	}
 
 	return &s, nil
@@ -72,48 +86,186 @@ func NewService(rcpEndpoint string) (*Service, error) {
 
 func (s *Service) Start(workerCount int) {
 	logger.GetLogger().Sugar().Infof("start indexer service with %d workers", workerCount)
-	ctx := context.Background()
+	s.shutDownCtx, s.cancel = context.WithCancel(context.Background())
+
+	s.createMqConn()
 
 	go s.blockConsumer.Run()
 	go s.txConsumer.Run()
 	go s.logConsumer.Run()
 
-	latestBlockNumber, err := s.ethClient.BlockNumber(ctx)
+	for i := 0; i < workerCount; i++ {
+		go s.scan(s.shutDownCtx)
+	}
+	s.createMqConn()
+
+}
+
+func (s *Service) createMqConn() {
+	var err error
+	s.mqConn, err = amqp.Dial(config.GetConfig().MQEndpoint)
 	if err != nil {
 		panic(err)
 	}
-	// go s.subscribe()
-
-	interval := latestBlockNumber / uint64(workerCount)
-	for i := 0; i < workerCount; i++ {
-		logger.GetLogger().Sugar().Infof("start worker %d", i)
-		if i == 0 {
-			go s.scan(ctx, 0, uint64(i+1)*interval)
-			continue
-		} else if i == workerCount-1 {
-			go s.scan(ctx, uint64(i)*interval+1, latestBlockNumber)
-			continue
-		}
-		go s.scan(ctx, uint64(i)*interval+1, uint64(i+1)*interval)
-	}
-
+	go s.startMqConsumer()
+	go s.jobDoneHandler(s.shutDownCtx)
 }
 
-func (s *Service) scan(ctx context.Context, from, to uint64) {
-	ctx = context.Background()
-	for i := from; i <= to; i++ {
-		blockNumber := big.NewInt(int64(i))
-		block, err := s.blockScanner.BlockByNumber(ctx, blockNumber)
+func (s *Service) startMqConsumer() {
+	ch, err := s.mqConn.Channel()
+	if err != nil {
+		logger.GetLogger().Sugar().Errorf("Failed to open a channel: %v", err)
+		return
+	}
+	defer ch.Close()
+
+	err = ch.Qos(1, 0, false)
+	if err != nil {
+		logger.GetLogger().Sugar().Errorf("Failed to set prefetch count: %v", err)
+		return
+	}
+
+	queue, err := ch.QueueDeclare(
+		"blockNumber_queue",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		logger.GetLogger().Sugar().Errorf("Failed to declare a queue: %v", err)
+		return
+	}
+
+	msgs, err := ch.Consume(
+		queue.Name,
+		"indexer_service",
+		false,
+		false,
+		false,
+		false,
+		nil,
+	)
+
+	if err != nil {
+		logger.GetLogger().Sugar().Errorf("Failed to declare a queue: %v", err)
+		return
+	}
+
+	for msg := range msgs {
+		blockNumber, err := strconv.ParseUint(string(msg.Body), 10, 64)
+		logger.GetLogger().Sugar().Infof("Received a message: %s", msg.Body)
+
 		if err != nil {
-			logger.GetLogger().Sugar().Errorf("scan block %d error: %s", i, err.Error())
+			logger.GetLogger().Sugar().Errorf("Failed to parse block number: %v", err)
 			continue
 		}
-		s.scanBlockInfo(ctx, block)
+		blockNumberBig := big.NewInt(int64(blockNumber))
+		responseChan := make(chan model.JobResult)
+
+		s.jobChan <- model.Job{
+			BlockNumber: blockNumberBig,
+			DoneChan:    responseChan,
+			Msg:         &msg,
+		}
+		s.jobDone <- responseChan
 	}
-	logger.GetLogger().Sugar().Infof("scan block from %d to %d done", from, to)
 }
 
-func (s *Service) scanBlockInfo(ctx context.Context, block *types.Block) {
+func (s *Service) jobDoneHandler(ctx context.Context) {
+
+	for {
+		select {
+		case job := <-s.jobDone:
+			result := <-job
+			if result.BlockNumber == nil {
+				logger.GetLogger().Sugar().Errorf("Failed to get block number: %v", result.BlockNumber)
+				continue
+			}
+			result.Msg.Ack(true)
+			s.publishBlockDone(result.BlockNumber)
+
+		case <-ctx.Done():
+			return
+		}
+	}
+
+}
+
+func (s *Service) publishBlockDone(blockNumber *big.Int) {
+	ch, err := s.mqConn.Channel()
+	if err != nil {
+		logger.GetLogger().Sugar().Errorf("Failed to open a channel: %v", err)
+		return
+	}
+	defer ch.Close()
+
+	queue, err := ch.QueueDeclare(
+		"blockNumber_done_queue",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+
+	if err != nil {
+		logger.GetLogger().Sugar().Errorf("Failed to declare a queue: %v", err)
+	}
+	err = ch.Publish(
+		"",
+		queue.Name,
+		false,
+		false,
+		amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        []byte(blockNumber.String()),
+		},
+	)
+	if err != nil {
+		logger.GetLogger().Sugar().Errorf("Failed to publish a message: %v", err)
+		return
+	}
+	logger.GetLogger().Sugar().Infof("Published a message: %s", blockNumber.String())
+
+}
+
+func (s *Service) scan(ctx context.Context) {
+	for {
+		select {
+		case job := <-s.jobChan:
+			blockNumber := job.BlockNumber
+			block, err := s.blockScanner.BlockByNumber(ctx, blockNumber)
+
+			if err != nil {
+				logger.GetLogger().Sugar().Errorf("scan block %d error: %s", blockNumber, err.Error())
+				job.DoneChan <- model.JobResult{
+					BlockNumber: nil,
+					Msg:         job.Msg,
+				}
+				continue
+			}
+			err = s.scanBlockInfo(ctx, block)
+			if err != nil {
+				logger.GetLogger().Sugar().Errorf("scan block %d error: %s", blockNumber, err.Error())
+				job.DoneChan <- model.JobResult{
+					BlockNumber: nil,
+					Msg:         job.Msg,
+				}
+				continue
+			}
+			job.DoneChan <- model.JobResult{
+				BlockNumber: blockNumber,
+				Msg:         job.Msg,
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (s *Service) scanBlockInfo(ctx context.Context, block *types.Block) error {
 	blockRow := convertBlockToRow(block)
 	// sned to chan
 
@@ -125,60 +277,39 @@ func (s *Service) scanBlockInfo(ctx context.Context, block *types.Block) {
 			logger.LoadExtra(map[string]interface{}{
 				"err": err.Error(),
 			}).Error("convert tx to row error")
-			continue
+			return fmt.Errorf("scanBlockInfo: %s", err.Error())
 		}
-		// sned to chan
+
 		s.txConsumer.GetChan().(chan model.TransactionRow) <- txRow
+
 		logs, err := s.txScanner.LogsByTxHash(ctx, tx.Hash())
 		if err != nil && !strings.Contains(err.Error(), "LogsByTxHash : not found") {
 			logger.LoadExtra(map[string]interface{}{
 				"err": err.Error(),
 			}).Error("get logs error")
-			continue
+			return fmt.Errorf("scanBlockInfo: %s", err.Error())
 		}
+
 		for _, log := range logs {
 			logRow := convertLogToRow(log, tx.Hash().Hex())
-			// sned to chan
 			s.logConsumer.GetChan().(chan model.LogRow) <- logRow
 		}
 	}
-
-}
-
-func (s *Service) subscribe() {
-	headers := make(chan *types.Header)
-	ctx := context.Background()
-	sub, err := s.ethClient.SubscribeNewHead(ctx, headers)
-	if err != nil {
-		logger.LoadExtra(map[string]interface{}{
-			"err": err.Error(),
-		}).Error("subscribe error")
-		panic(err)
-	}
-	for {
-		select {
-		case err := <-sub.Err():
-			logger.LoadExtra(map[string]interface{}{
-				"err": err.Error(),
-			}).Error("subscribe error")
-		case header := <-headers:
-			logger.LoadExtra(map[string]interface{}{
-				"blockNumber": header.Number.String(),
-			}).Info("new block")
-			block, err := s.blockScanner.BlockByHash(ctx, header.Hash())
-			if err != nil {
-				logger.LoadExtra(map[string]interface{}{
-					"err": err.Error(),
-				}).Error("subscribe error")
-				continue
-			}
-			s.scanBlockInfo(ctx, block)
-
-		}
-	}
-
+	return nil
 }
 
 func (s *Service) Shutdown() {
+	s.shutdownOnce.Do(func() {
 
+		s.mqConn.Close()
+		s.cancel()
+		close(s.jobChan)
+		close(s.jobDone)
+		s.blockConsumer.Shutdown()
+		s.txConsumer.Shutdown()
+		s.logConsumer.Shutdown()
+		s.blockScanner.Shutdown()
+		s.txScanner.Shutdown()
+
+	})
 }
