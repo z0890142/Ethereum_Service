@@ -23,8 +23,8 @@ func GetConfig() *Config {
 
 // Config 該服務相關配置
 type Config struct {
-	Env              string  `mapstructure:"ENV"`
-	ShortenerService Service `mapstructure:"SHORTENER_SERVICE"`
+	Env     string  `mapstructure:"ENV"`
+	Service Service `mapstructure:"SERVICE"`
 
 	LogLevel  string         `mapstructure:"LOG_LEVEL"`
 	LogFile   string         `mapstructure:"LOG_FILE"`

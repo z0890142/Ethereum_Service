@@ -1,4 +1,5 @@
 CREATE TABLE IF NOT EXISTS `block` (
+  `hash` varchar(255) NOT NULL,
   `number` bigint NOT NULL,
   `gas_limit` bigint(20) unsigned NOT NULL,
   `gas_used` bigint(20) unsigned NOT NULL,

@@ -10,6 +10,7 @@ import (
 
 func convertBlockToRow(block *types.Block) model.BlockRow {
 	return model.BlockRow{
+		Hash:       block.Hash().Hex(),
 		Number:     (*block.Number()).Int64(),
 		GasLimit:   block.GasLimit(),
 		GasUsed:    block.GasUsed(),

@@ -1,6 +1,7 @@
 package model
 
 type BlockRow struct {
+	Hash       string
 	Number     int64
 	GasLimit   uint64
 	GasUsed    uint64

@@ -13,7 +13,7 @@ import (
 )
 
 type TxScanner interface {
-	LogsByTxHash(ctx context.Context, txHash common.Hash) ([]*types.Log, error)
+	TxDetailByHash(ctx context.Context, txHash common.Hash) (*types.Transaction, []*types.Log, error)
 	Shutdown()
 }
 
@@ -30,11 +30,12 @@ func NewDefaultTxScanner(rpcEndpoint string) TxScanner {
 	return s
 }
 
-func (s *defaultTxScanner) LogsByTxHash(ctx context.Context, txHash common.Hash) ([]*types.Log, error) {
+func (s *defaultTxScanner) TxDetailByHash(ctx context.Context, txHash common.Hash) (*types.Transaction, []*types.Log, error) {
 	var isPending bool
 	var err error
+	var tx *types.Transaction
 	for i := 0; i < config.GetConfig().MaxRetryTime; i++ {
-		_, isPending, err = s.ethClient.TransactionByHash(ctx, txHash)
+		tx, isPending, err = s.ethClient.TransactionByHash(ctx, txHash)
 		if err != nil && strings.Contains(err.Error(), "connection reset by peer") {
 			s.createClient()
 		}
@@ -45,10 +46,10 @@ func (s *defaultTxScanner) LogsByTxHash(ctx context.Context, txHash common.Hash)
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("LogsByTxHash : %w", err)
+		return tx, nil, fmt.Errorf("LogsByTxHash : %w", err)
 	}
 	if isPending {
-		return nil, nil
+		return tx, nil, nil
 	}
 
 	var receipt *types.Receipt
@@ -64,9 +65,9 @@ func (s *defaultTxScanner) LogsByTxHash(ctx context.Context, txHash common.Hash)
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("LogsByTxHash : %w", err)
+		return tx, nil, fmt.Errorf("LogsByTxHash : %w", err)
 	}
-	return receipt.Logs, nil
+	return tx, receipt.Logs, nil
 }
 
 func (s *defaultTxScanner) createClient() {

@@ -268,7 +268,6 @@ func (s *Service) scan(ctx context.Context) {
 func (s *Service) scanBlockInfo(ctx context.Context, block *types.Block) error {
 	blockRow := convertBlockToRow(block)
 	// sned to chan
-
 	s.blockConsumer.GetChan().(chan model.BlockRow) <- blockRow
 
 	for _, tx := range block.Transactions() {
@@ -282,7 +281,7 @@ func (s *Service) scanBlockInfo(ctx context.Context, block *types.Block) error {
 
 		s.txConsumer.GetChan().(chan model.TransactionRow) <- txRow
 
-		logs, err := s.txScanner.LogsByTxHash(ctx, tx.Hash())
+		_, logs, err := s.txScanner.TxDetailByHash(ctx, tx.Hash())
 		if err != nil && !strings.Contains(err.Error(), "LogsByTxHash : not found") {
 			logger.LoadExtra(map[string]interface{}{
 				"err": err.Error(),

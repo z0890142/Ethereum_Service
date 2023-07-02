@@ -18,7 +18,7 @@ type MysqlHandler struct {
 	gormClient *gorm.DB
 }
 
-func NewMysqlHandler(databaseOpts *config.DatabaseOption) (*MysqlHandler, error) {
+func NewMysqlHandler(databaseOpts *config.DatabaseOption) (DataHandler, error) {
 	db, err := common.OpenMysqlDatabase(databaseOpts)
 	if err != nil {
 		return nil, fmt.Errorf("NewMysqlHandler: %s", err)
@@ -68,6 +68,19 @@ func (m *MysqlHandler) GetLatestBlockNumber(ctx context.Context) (int64, error) 
 	return blockNumber, nil
 }
 
+func (m *MysqlHandler) GetBlockRow(ctx context.Context, blockRow *model.BlockRow) error {
+	err := m.gormClient.
+		Table(c.Block).
+		WithContext(ctx).
+		Where(blockRow).
+		First(blockRow).Error
+
+	if err != nil {
+		return fmt.Errorf("GetBlockRow : %w", err)
+	}
+	return nil
+}
+
 func (m *MysqlHandler) SaveBlockRows(ctx context.Context, blockRow []*model.BlockRow) error {
 	err := m.gormClient.Clauses(clause.Insert{Modifier: "IGNORE"}).
 		Table(c.Block).WithContext(ctx).Create(blockRow).Error
@@ -93,4 +106,59 @@ func (m *MysqlHandler) SaveLogRow(ctx context.Context, logRow []*model.LogRow) e
 		return fmt.Errorf("SaveLogRow : %w", err)
 	}
 	return nil
+}
+
+func (m *MysqlHandler) GetBlockRowByBlockNumbers(ctx context.Context, numbers []int64) ([]model.BlockRow, error) {
+	var blockRows []model.BlockRow
+	err := m.gormClient.
+		Table(c.Block).
+		WithContext(ctx).
+		Where("number IN ?", numbers).
+		Find(&blockRows).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("GetBlockRowByBlockNumbers : %w", err)
+	}
+	return blockRows, nil
+}
+
+func (m *MysqlHandler) GetLogRowByTxHash(ctx context.Context, txHash string) ([]model.LogRow, error) {
+	var logRows []model.LogRow
+	err := m.gormClient.
+		Table(c.Log).
+		WithContext(ctx).
+		Where("tx_hash = ?", txHash).
+		Find(&logRows).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("GetLogRowByTxHash : %w", err)
+	}
+	return logRows, nil
+}
+
+func (m *MysqlHandler) GetTransactionRow(ctx context.Context, tx *model.TransactionRow) error {
+	err := m.gormClient.
+		Table(c.Tx).
+		WithContext(ctx).
+		Where(tx).
+		First(tx).Error
+
+	if err != nil {
+		return fmt.Errorf("GetTransactionRow : %w", err)
+	}
+	return nil
+}
+
+func (m *MysqlHandler) GetTransactionRowByBlockNumber(ctx context.Context, blockNumber int64) ([]model.TransactionRow, error) {
+	var txRows []model.TransactionRow
+	err := m.gormClient.
+		Table(c.Tx).
+		WithContext(ctx).
+		Where("block_number = ?", blockNumber).
+		Find(&txRows).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("GetTransactionRowByBlockNumber : %w", err)
+	}
+	return txRows, nil
 }

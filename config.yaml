@@ -1,6 +1,6 @@
 ENV: local
-SHORTENER_SERVICE:
-  NAME: url_shortener
+SERVICE:
+  NAME: api_service
   HOST: "0.0.0.0"
   PORT: "80"
 

@@ -12,7 +12,7 @@ type txConsumer struct {
 	txChan          chan model.TransactionRow
 	storeBufferSize int
 	storeInterval   time.Duration
-	mysqlHandler    *data.MysqlHandler
+	mysqlHandler    data.DataHandler
 }
 
 func (c *txConsumer) Run() {
