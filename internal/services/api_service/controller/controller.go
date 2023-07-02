@@ -20,6 +20,7 @@ type Controller struct {
 	mysqlHandler data.DataHandler
 	txScanner    scanner.TxScanner
 	blockScanner scanner.BlockScanner
+	logScanner   scanner.LogScanner
 
 	ethClient *ethclient.Client
 }
@@ -37,11 +38,13 @@ func NewController() *Controller {
 
 	txScanner := scanner.NewDefaultTxScanner(config.GetConfig().RCPEndpoint)
 	blockScanner := scanner.NewDefaultBlockScanner(config.GetConfig().RCPEndpoint)
+	logScanner := scanner.NewDefaultLogScanner(config.GetConfig().RCPEndpoint)
 
 	return &Controller{
 		ethClient:    ethClient,
 		mysqlHandler: mysqlHandler,
 		txScanner:    txScanner,
+		logScanner:   logScanner,
 		blockScanner: blockScanner,
 	}
 }
@@ -117,7 +120,7 @@ func (c *Controller) getTxFromDB(txHash string) (model.TxResponse, error) {
 
 func (c *Controller) getTxFromRPC(txHash string) (model.TxResponse, error) {
 	hash := common.HexToHash(txHash)
-	tx, logs, err := c.txScanner.TxDetailByHash(context.Background(), hash)
+	tx, isPending, err := c.txScanner.TxDetailByHash(context.Background(), hash)
 	if err != nil {
 		return model.TxResponse{}, err
 	}
@@ -133,7 +136,14 @@ func (c *Controller) getTxFromRPC(txHash string) (model.TxResponse, error) {
 		Value:  tx.Value().String(),
 		Data:   string(tx.Data()),
 	}
-	resp.Logs = convertTypeLogToResp(logs)
+
+	if !isPending {
+		logs, err := c.logScanner.GetLogs(context.Background(), hash)
+		if err != nil {
+			return model.TxResponse{}, fmt.Errorf("getTxFromRPC : %w", err)
+		}
+		resp.Logs = convertTypeLogToResp(logs)
+	}
 
 	receipt, err := c.ethClient.TransactionReceipt(context.Background(), hash)
 	if err != nil {

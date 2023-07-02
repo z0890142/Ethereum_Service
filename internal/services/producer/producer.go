@@ -5,6 +5,7 @@ import (
 	"Ethereum_Service/internal/data"
 	"Ethereum_Service/pkg/utils/logger"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -17,11 +18,22 @@ import (
 )
 
 type Producer struct {
-	ethClient         *ethclient.Client
-	mysqlHandler      data.DataHandler
-	mqConn            *amqp.Connection
-	latestBlockNumber uint64
+	ethClient           *ethclient.Client
+	mysqlHandler        data.DataHandler
+	mqConn              *amqp.Connection
+	latestBlockNumber   uint64
+	dbLatestBlockNumber int64
 }
+
+const (
+	BlockNumberQueueName       = "blockNumber_queue"
+	BlockNumberDoneQueueName   = "blockNumber_done_queue"
+	ProducerServiceConsumerTag = "producer_service"
+)
+
+var (
+	ErrMaxRetryExceeded = errors.New("max retry attempts exceeded")
+)
 
 func NewProducer(rcpEndpoint string) (*Producer, error) {
 	ethClient, err := ethclient.Dial(rcpEndpoint)
@@ -33,6 +45,7 @@ func NewProducer(rcpEndpoint string) (*Producer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("NewProducer : %s", err.Error())
 	}
+
 	return &Producer{
 		ethClient:    ethClient,
 		mysqlHandler: mysqlHandler,
@@ -41,21 +54,18 @@ func NewProducer(rcpEndpoint string) (*Producer, error) {
 
 func (p *Producer) Start() {
 	p.createEthClient()
-	var err error
-	p.latestBlockNumber, err = p.ethClient.BlockNumber(context.Background())
-	if err != nil {
-		panic(err)
-	}
-
-	go p.getLatestBlockNumber()
+	p.getLatestBlockNumber()
+	go p.continueUpdateBlockNumber()
 	go p.receiveACK()
 	p.startLoop()
 }
 
 func (p *Producer) startLoop() {
 	index, err := p.mysqlHandler.GetLatestBlockNumber(context.Background())
+	p.dbLatestBlockNumber = index
 	if err != nil {
-		panic(err)
+		logger.GetLogger().Sugar().Errorf("startLoop: failed to get latest block number from MySQL: %s", err.Error())
+		return
 	}
 
 	for index <= int64(p.latestBlockNumber) {
@@ -77,6 +87,24 @@ func (p *Producer) createEthClient() {
 }
 
 func (p *Producer) getLatestBlockNumber() {
+
+	var err error
+	for i := 0; i < config.GetConfig().MaxRetryTime; i++ {
+		p.latestBlockNumber, err = p.ethClient.BlockNumber(context.Background())
+		if err != nil && strings.Contains(err.Error(), "connection reset by peer") {
+			p.createEthClient()
+		}
+		if err == nil {
+			break
+		}
+		<-time.NewTimer(time.Second * 1).C
+	}
+	if err != nil {
+		panic(err)
+	}
+
+}
+func (p *Producer) continueUpdateBlockNumber() {
 	t := time.NewTicker(time.Second * 5)
 	for {
 		var err error
@@ -105,7 +133,7 @@ func (p *Producer) pushMsg(blockNumber string) error {
 	defer ch.Close()
 
 	queue, err := ch.QueueDeclare(
-		"blockNumber_queue",
+		BlockNumberQueueName,
 		true,
 		false,
 		false,
@@ -113,8 +141,9 @@ func (p *Producer) pushMsg(blockNumber string) error {
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("Start : %s", err.Error())
+		return fmt.Errorf("pushMsg: failed to declare queue: %s", err.Error())
 	}
+
 	err = ch.Publish(
 		"",
 		queue.Name,
@@ -126,7 +155,7 @@ func (p *Producer) pushMsg(blockNumber string) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("Start : %s", err.Error())
+		return fmt.Errorf("pushMsg: failed to publish message: %s", err.Error())
 	}
 	return nil
 }
@@ -163,10 +192,18 @@ func (p *Producer) receiveACK() {
 			logger.GetLogger().Sugar().Errorf("receiveACK : %s", err.Error())
 			continue
 		}
+
+		if num < p.dbLatestBlockNumber {
+			msg.Ack(true)
+			continue
+		}
+
 		err = p.mysqlHandler.UpdateLatestBlockNumber(context.Background(), num)
 		if err != nil {
 			logger.GetLogger().Sugar().Errorf("receiveACK : %s", err.Error())
 		}
+
+		p.dbLatestBlockNumber = num
 		msg.Ack(true)
 		logger.GetLogger().Sugar().Infof("receiveACK : %d", num)
 	}
