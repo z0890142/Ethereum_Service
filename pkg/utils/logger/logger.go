@@ -120,3 +120,21 @@ func LoadExtra(extras map[string]interface{}) *zap.Logger {
 	}
 	return With(args...)
 }
+
+func GetLoggerWithKeys(keys ...map[string]interface{}) *zap.Logger {
+	extras := map[string]interface{}{}
+	for _, inputKeys := range keys {
+		for k, v := range inputKeys {
+			extras[k] = v
+		}
+	}
+
+	args := make([]interface{}, len(extras)*2)
+	i := 0
+	for k, v := range extras {
+		args[i] = k
+		args[i+1] = v
+		i += 2
+	}
+	return With(args...)
+}

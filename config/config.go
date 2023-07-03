@@ -36,7 +36,6 @@ type Config struct {
 	WorkerNumber      int    `mapstructure:"WORKER_NUMBER"`
 	StoreBufferSize   int    `mapstructure:"STORE_BUFFER_SIZE"`
 	MigrationFilePath string `mapstructure:"MIGRATION_FILE_PATH"`
-	Trace             Trace  `mapstructure:"TRACE"`
 	MaxRetryTime      int    `mapstructure:"MAX_RETRY_TIME"`
 	RCPEndpoint       string `mapstructure:"RCP_ENDPOINT"`
 	MQEndpoint        string `mapstructure:"MQ_ENDPOINT"`
@@ -87,19 +86,7 @@ type DatabaseOption struct {
 }
 
 type RedisOption struct {
-	Enable   bool   `mapstructure:"ENABLE"`
 	Host     string `mapstructure:"HOST"`
 	Port     string `mapstructure:"PORT"`
 	Password string `mapstructure:"PASSWORD"`
-}
-
-type Ratelimit struct {
-	Enable bool  `mapstructure:"ENABLE"`
-	Secend int   `mapstructure:"SECEND"`
-	Number int64 `mapstructure:"NUMBER"`
-}
-
-type Trace struct {
-	Enable   bool   `mapstructure:"ENABLE"`
-	Endpoint string `mapstructure:"ENDPOINT"`
 }

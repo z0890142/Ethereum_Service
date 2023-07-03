@@ -13,7 +13,7 @@ import (
 )
 
 type TxScanner interface {
-	TxDetailByHash(ctx context.Context, txHash common.Hash) (*types.Transaction, []*types.Log, error)
+	TxDetailByHash(ctx context.Context, txHash common.Hash) (*types.Transaction, bool, error)
 	Shutdown()
 }
 
@@ -30,7 +30,7 @@ func NewDefaultTxScanner(rpcEndpoint string) TxScanner {
 	return s
 }
 
-func (s *defaultTxScanner) TxDetailByHash(ctx context.Context, txHash common.Hash) (*types.Transaction, []*types.Log, error) {
+func (s *defaultTxScanner) TxDetailByHash(ctx context.Context, txHash common.Hash) (*types.Transaction, bool, error) {
 	var isPending bool
 	var err error
 	var tx *types.Transaction
@@ -46,28 +46,9 @@ func (s *defaultTxScanner) TxDetailByHash(ctx context.Context, txHash common.Has
 	}
 
 	if err != nil {
-		return tx, nil, fmt.Errorf("LogsByTxHash : %w", err)
+		return tx, isPending, fmt.Errorf("LogsByTxHash : %w", err)
 	}
-	if isPending {
-		return tx, nil, nil
-	}
-
-	var receipt *types.Receipt
-	for i := 0; i < config.GetConfig().MaxRetryTime; i++ {
-		receipt, err = s.ethClient.TransactionReceipt(ctx, txHash)
-		if err != nil && strings.Contains(err.Error(), "connection reset by peer") {
-			s.createClient()
-		}
-		if err == nil {
-			break
-		}
-		<-time.NewTimer(time.Second * 1).C
-	}
-
-	if err != nil {
-		return tx, nil, fmt.Errorf("LogsByTxHash : %w", err)
-	}
-	return tx, receipt.Logs, nil
+	return tx, isPending, nil
 }
 
 func (s *defaultTxScanner) createClient() {

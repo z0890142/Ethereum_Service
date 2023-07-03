@@ -1,0 +1,88 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:latest
+    container_name: mysql
+    environment:
+      MYSQL_DATABASE: eth_service
+      MYSQL_ROOT_PASSWORD: pass
+
+  producer-service-build:
+    build:
+      context: .
+      args:
+        MAIN_PATH: producer
+      dockerfile: build/dockerfile
+    image: producer:latest
+
+  eth_block_indexer-service-build:
+    build:
+      context: .
+      args:
+        MAIN_PATH: eth_block_indexer
+      dockerfile: build/dockerfile
+    image: eth_block_indexer:latest
+    
+  eth_api_service-service-build:
+    build:
+      context: .
+      args:
+        MAIN_PATH: api_service
+      dockerfile: build/dockerfile
+    image: eth_api_service:latest
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: pass
+    restart: always
+  redis:
+    image: redis:6-alpine
+    container_name: redis
+    ports:
+      - 6379:6379
+    command: redis-server --requirepass "pass"  --maxmemory-policy volatile-lru
+    platform: linux/amd64
+  producer :
+    image: producer:latest
+    environment:
+      - DATABASES.HOST=mysql
+      - MIGRATION_FILE_PATH=./pkg/database/migrations
+    depends_on:
+      - mysql
+      - redis
+    restart: always
+
+  eth_block_indexer :
+    image: eth_block_indexer:latest
+    environment:
+      - DATABASES.HOST=mysql
+      - MIGRATION_FILE_PATH=./pkg/database/migrations
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+      - producer
+    restart: always
+
+  eth_api_service :
+    image: eth_api_service:latest
+    ports:  
+      - 80:80
+    environment:
+      - DATABASES.HOST=mysql
+      - MIGRATION_FILE_PATH=./pkg/database/migrations
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+      - producer
+      - eth_block_indexer
+    restart: always
+
+
+
+
