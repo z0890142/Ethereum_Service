@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/AuthMe01/authme-go-kit/logger"
+	"Ethereum_Service/pkg/utils/logger"
 
 	"github.com/spf13/viper"
 )
@@ -59,7 +59,6 @@ func loadEnv(vp *viper.Viper, globalConfig interface{}) {
 		"env":     viper.GetString("ENV"),
 	}
 	vp.AutomaticEnv()
-
 	for _, envstr := range os.Environ() {
 		parts := strings.SplitN(envstr, "=", 2)
 		key := parts[0]

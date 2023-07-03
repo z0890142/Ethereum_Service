@@ -4,12 +4,12 @@ SERVICE:
   HOST: "0.0.0.0"
   PORT: "80"
 
-LOG_LEVEL : DEBUG
+LOG_LEVEL : INFO
 LOG_FILE: stdout
 
 DATABASES:
   DRIVER: mysql
-  HOST: 127.0.0.1
+  HOST: mysql
   PORT: 3306
   USERNAME: root
   PASSWORD: pass
@@ -21,19 +21,14 @@ DATABASES:
   WRITE_TIMEOUT: 1s
 
 REDIS:
-  ENABLE: false
-  HOST: 127.0.0.1
+  HOST: redis
   PORT: 6379
   PASSWORD: pass
 
 STORE_BUFFER_SIZE: 1000
 MIGRATION_FILE_PATH: ../../pkg/database/migrations
 
-TRACE:
-  ENABLE: false
-  ENDPOINT: http://jaeger:14268/api/traces
-
 MAX_RETRY_TIME: 10
 RCP_ENDPOINT: https://data-seed-prebsc-2-s3.binance.org:8545/
 WORKER_NUMBER: 100
-MQ_ENDPOINT: amqp://user:pass@localhost:5672/
+MQ_ENDPOINT: amqp://user:pass@rabbitmq:5672/
