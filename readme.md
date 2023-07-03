@@ -75,7 +75,7 @@ make eth_service
 ```
 ---
 
-### Config
+## Config
 ```
 ENV: local
 SERVICE:
