@@ -25,10 +25,6 @@ func getBlockFromStore(dataHandler data.DataHandler, blockNumber int64) (model.B
 		Transactions: []string{},
 	}
 
-	txRows, err := dataHandler.GetTransactionRowByBlockNumber(context.Background(), blockNumber)
-	for _, tx := range txRows {
-		resp.Transactions = append(resp.Transactions, tx.Hash)
-	}
 	return resp, err
 }
 
@@ -46,10 +42,6 @@ func getBlockFromRPC(blockScanner scanner.BlockScanner, mysqlHandler, redisHandl
 		Transactions: []string{},
 	}
 
-	txs := block.Transactions()
-	for _, tx := range txs {
-		resp.Transactions = append(resp.Transactions, tx.Hash().Hex())
-	}
 	blockRow := model.BlockRow{
 		Hash:       block.Hash().Hex(),
 		Number:     (*block.Number()).Int64(),
@@ -67,4 +59,31 @@ func getBlockFromRPC(blockScanner scanner.BlockScanner, mysqlHandler, redisHandl
 	go mysqlHandler.SaveBlockRows(context.Background(), []*model.BlockRow{&blockRow})
 	go redisHandler.SaveBlockRows(context.Background(), []*model.BlockRow{&blockRow})
 	return resp, nil
+}
+
+func getTxHashFromStore(dataHandler data.DataHandler, blockNumber int64) ([]string, error) {
+	txRows, err := dataHandler.GetTransactionRowByBlockNumber(context.Background(), blockNumber)
+	if err != nil {
+		return nil, err
+	}
+	var txHashes []string
+	for _, txRow := range txRows {
+		txHashes = append(txHashes, txRow.Hash)
+	}
+	return txHashes, err
+}
+
+func getTxHashFromRPC(blockScanner scanner.BlockScanner, blockNumber int64) ([]string, error) {
+	blockNumBig := big.NewInt(blockNumber)
+	block, err := blockScanner.BlockByNumber(context.Background(), blockNumBig)
+	if err != nil {
+		return nil, err
+	}
+	txHashes := []string{}
+	txs := block.Transactions()
+	for _, tx := range txs {
+		txHashes = append(txHashes, tx.Hash().Hex())
+	}
+	return txHashes, nil
+
 }

@@ -69,6 +69,10 @@ service1 --> RPCEndpoint
 * api_service
     優先讀取 Redis 與 Database 內的資料，如 Redis 與 Database 內皆無資料，會向 RPC Endpoint 發起 Request 索取需要資料。
 
+###啟動方式
+```
+make eth_service
+```
 ---
 
 ### Config

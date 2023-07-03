@@ -116,6 +116,13 @@ func (c *Controller) GetBlock(ginC *gin.Context) {
 		ginC.JSON(404, gin.H{"error": err.Error()})
 		return
 	}
+
+	txHashs, err := c.getBlockTx(blockNum)
+	if err != nil {
+		ginC.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	resp.Transactions = txHashs
 	ginC.JSON(200, resp)
 
 }
@@ -136,6 +143,22 @@ func (c *Controller) getBlockDetail(blockNumber int64) (model.BlockResponseWithT
 		return model.BlockResponseWithTx{}, err
 	}
 	return resp, nil
+}
+func (c *Controller) getBlockTx(blockNumber int64) ([]string, error) {
+	txHashs, err := getTxHashFromStore(c.redisHandler, blockNumber)
+	if err == nil && len(txHashs) != 0 {
+		return txHashs, err
+	}
+	txHashs, err = getTxHashFromStore(c.mysqlHandler, blockNumber)
+	if err == nil && len(txHashs) != 0 {
+		return txHashs, err
+	}
+	txHashs, err = getTxHashFromRPC(c.blockScanner, blockNumber)
+	if err != nil {
+		return nil, err
+	}
+	return txHashs, nil
+
 }
 
 func (c *Controller) listBlocks(limit uint64) ([]model.BlockResponse, error) {
